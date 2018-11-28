@@ -1,4 +1,6 @@
+/* eslint-disable no-console */
 'use strict';
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const request = require('request');
@@ -10,22 +12,21 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const Nexmo = require('nexmo');
 
 const nexmo = new Nexmo({
-    apiKey: '7c47a82b',
-    apiSecret: 'Mg5AHLqxhSBH77s1',
-    applicationId: 'a5c4e5af-3d84-40ed-8366-b082beeeeefd',
-    privateKey: 'private.key'
+    apiKey: process.env.NEXMO_API_KEY,
+    apiSecret: process.env.NEXMO_API_SECRET,
+    applicationId: process.env.NEXMO_APPLICATION_ID,
+    privateKey: process.env.NEXMO_APPLICATION_PRIVATE_KEY
 });
 
 app.post('/webhooks/inbound-message', (req, res) => {
-    //console.log(req.body.message);
 
-    // swap 'to' and 'from' to return the message
+    // swap 'to' and 'from' to respond to the message
     const from = req.body.to.id;
     const to = req.body.from.id;
 
     const content = req.body.message.content;
 
-    // Get latitude and longitude
+    // User has sent location from FB Messenger mobile app
     if (content.location) {
         getPostboxLocations(content.location.lat, content.location.long).then((results) => {
             processCSV(results).then((nearest) => {
@@ -36,7 +37,7 @@ app.post('/webhooks/inbound-message', (req, res) => {
         }, (error) => {
             sendMessage(from, to, error);
         });
-
+    // User has sent address which needs geocoding
     } else {
         geocodeAddress(content.text).then((address) => {
             getPostboxLocations(address.latitude, address.longitude).then((results) => {
@@ -56,25 +57,27 @@ app.post('/webhooks/inbound-message', (req, res) => {
 });
 
 app.post('/webhooks/message-status', (req, res) => {
-    //console.log(req.body);
+    console.log(req.body);
     res.status(200).end();
 });
 
 const generateMapLink = (nearest) => {
     let msg = '';
+    const mapUrl = 'https://www.google.com/maps/search/?api=1';
 
     // Check to see if lat/lng pair was generated
     if (typeof nearest.latitude === 'undefined') {
         msg = 'No location provided!';
     } else {
-        msg = `Your nearest postcode is here: https://www.google.com/maps/search/?api=1&query=${nearest.latitude},${nearest.longitude}`;
+        msg = `Your nearest postcode is here: ${mapUrl}&query=${nearest.latitude},${nearest.longitude}`;
     }
     return msg;
 };
 
 const getPostboxLocations = (lat, lon) => {
     return new Promise((resolve, reject) => {
-        request(`http://dracos.co.uk/made/locating-postboxes/nearest/?format=csv&lat=${lat}&lon=${lon}`, (error, response, body) => {
+        const postboxUrl = 'http://dracos.co.uk/made/locating-postboxes/nearest/?format=csv';
+        request(`${postboxUrl}&lat=${lat}&lon=${lon}`, (error, response, body) => {
             if (error) {
                 reject('Unable to locate postboxes!');
             } else {
@@ -86,8 +89,9 @@ const getPostboxLocations = (lat, lon) => {
 
 const geocodeAddress = (addressToGeocode) => {
     return new Promise((resolve, reject) => {
+        const geocodeUrl = 'https://eu1.locationiq.com/v1/search.php?countrycodes=gb&limit=1&format=json';
         const queryAddress = encodeURI(addressToGeocode);
-        request(`https://eu1.locationiq.com/v1/search.php?key=e406a750e93823&q=${queryAddress}&countrycodes=gb&limit=1&format=json`, (error, response, body) => {
+        request(`${geocodeUrl}&key=${process.env.LOCATIONIQ_API_KEY}&q=${queryAddress}`, (error, response, body) => {
             if (error) {
                 // Something went wrong in the call to the geocoding servie
                 reject(error);
@@ -96,7 +100,7 @@ const geocodeAddress = (addressToGeocode) => {
                 // No results returned
                 if (obj.error) {
                     reject('Unable to find that address!');
-                    // Results returned
+                    // Retrieve map coordinates from the results
                 } else {
                     let lat = obj[0].lat;
                     let lon = obj[0].lon;
@@ -127,7 +131,6 @@ const processCSV = (csv) => {
             };
             resolve(result);
         }
-
     });
 };
 
@@ -145,4 +148,4 @@ const sendMessage = (from, to, message) => {
     );
 };
 
-app.listen(5000);
+app.listen(3000);

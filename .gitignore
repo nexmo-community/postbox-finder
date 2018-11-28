@@ -1,0 +1,6 @@
+.env
+.eslintrc.js
+.nexmo-app
+private.key
+temp.key
+/node_modules
