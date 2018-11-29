@@ -27,7 +27,7 @@ app.post('/webhooks/inbound-message', (req, res) => {
     const content = req.body.message.content;
 
     // User has sent location from FB Messenger mobile app
-    if (content.location) {
+    if (content.type === 'location') {
         getPostboxLocations(content.location.lat, content.location.long).then((results) => {
             processCSV(results).then((nearest) => {
                 sendMessage(from, to, generateMapLink(nearest));
@@ -38,7 +38,7 @@ app.post('/webhooks/inbound-message', (req, res) => {
             sendMessage(from, to, error);
         });
     // User has sent address which needs geocoding
-    } else {
+    } else if(content.type === 'text') {
         geocodeAddress(content.text).then((address) => {
             getPostboxLocations(address.latitude, address.longitude).then((results) => {
                 processCSV(results).then((nearest) => {
